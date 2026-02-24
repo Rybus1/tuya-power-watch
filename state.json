@@ -3,8 +3,8 @@
   "lastSent": 0,
   "lastRaw": true,
   "rawStreak": 1,
-  "pendingStatus": "OFFLINE",
-  "pendingCount": 2,
+  "pendingStatus": "ONLINE",
+  "pendingCount": 1,
   "confirmedStatus": "OFFLINE",
   "lastNotifyAt": 1771898235702
 }

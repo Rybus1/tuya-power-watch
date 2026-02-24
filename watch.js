@@ -12,6 +12,8 @@ const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
 const STATE_FILE = "state.json";
 
+await sendTelegram(`✅ workflow started: ${new Date().toISOString()}`);
+
 // антиспам
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 минут
 // антидребезг: сколько подряд одинаковых статусов нужно, чтобы считать его "настоящим"

@@ -4,5 +4,7 @@
   "lastRaw": true,
   "rawStreak": 1,
   "pendingStatus": "ONLINE",
-  "pendingCount": 1
+  "pendingCount": 2,
+  "confirmedStatus": "ONLINE",
+  "lastNotifyAt": 1771898235702
 }

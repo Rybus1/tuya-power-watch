@@ -1,1 +1,6 @@
-{"online":true,"lastSent":0}
+{
+  "online": true,
+  "lastSent": 0,
+  "lastRaw": true,
+  "rawStreak": 1
+}

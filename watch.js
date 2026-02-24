@@ -186,6 +186,24 @@ function formatDurationUk(ms) {
   return parts.join(" ");
 }
 
+function formatDurationUkGenitive(ms) {
+  if (ms < 0 || !Number.isFinite(ms)) return "";
+  const totalMins = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  const parts = [];
+  if (hours > 0) {
+    const h = hours === 1 ? "години" : hours >= 2 && hours <= 4 ? "годин" : "годин";
+    parts.push(`${hours} ${h}`);
+  }
+  if (mins > 0) {
+    const m = mins === 1 ? "хвилини" : mins >= 2 && mins <= 4 ? "хвилин" : "хвилин";
+    parts.push(`${mins} ${m}`);
+  }
+  if (parts.length === 0) return "менше хвилини";
+  return parts.join(" ");
+}
+
 async function main() {
   if (!CLIENT_ID || !CLIENT_SECRET || !DEVICE_ID) {
     throw new Error("Missing TUYA env (TUYA_CLIENT_ID / TUYA_CLIENT_SECRET / TUYA_DEVICE_ID)");
@@ -229,12 +247,12 @@ async function main() {
   }
 
   const durationMs = now - (nextState.lastStatusAt ?? now);
-  const durationStr = formatDurationUk(durationMs);
+  const durationStrProtyahom = formatDurationUkGenitive(durationMs);
   const dtStr = formatDateUkStatus(new Date());
   const hasLight = currentStatus === "ONLINE";
   const statusLine = hasLight
-    ? `✅ Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
-    : `❌ НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
+    ? `✅ Є СВІТЛО. Воно там є вже протягом ${durationStrProtyahom}.`
+    : `❌ НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStrProtyahom}.`;
   const statusReply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
 
   for (const chatId of pendingStatusChats) {

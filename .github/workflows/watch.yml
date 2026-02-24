@@ -3,8 +3,9 @@ name: Tuya Watch
 on:
   push:
     branches: [ "main" ]
-  schedule:
-    - cron: "*/5 * * * *"
+  # Внешний cron (cron-job.org) дергает раз в минуту через repository_dispatch
+  repository_dispatch:
+    types: [ cron-tick ]
   workflow_dispatch:
 
 permissions:

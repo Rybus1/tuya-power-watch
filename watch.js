@@ -25,7 +25,7 @@ function readState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
   } catch (_) {
-    return { lastStatus: null };
+    return { lastStatus: null, lastStatusAt: null };
   }
 }
 
@@ -132,12 +132,32 @@ async function sendTelegram(text) {
   }
 }
 
-function formatDateUk(d) {
+function formatDateUk(d, withSeconds = true) {
   const date = d instanceof Date ? d : new Date(d);
-  const opts = { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+  const opts = { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false };
+  if (withSeconds) opts.second = "2-digit";
   const parts = new Intl.DateTimeFormat("uk-UA", opts).formatToParts(date);
   const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("day")}.${get("month")}.${get("year")} час ${get("hour")}:${get("minute")}:${get("second")}`;
+  const time = withSeconds ? `${get("hour")}:${get("minute")}:${get("second")}` : `${get("hour")}:${get("minute")}`;
+  return `${get("day")}.${get("month")}.${get("year")} час ${time}`;
+}
+
+function formatDurationUk(ms) {
+  if (ms < 0 || !Number.isFinite(ms)) return "";
+  const totalMins = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  const parts = [];
+  if (hours > 0) {
+    const h = hours === 1 ? "годину" : hours < 5 ? "години" : "годин";
+    parts.push(`${hours} ${h}`);
+  }
+  if (mins > 0) {
+    const m = mins === 1 ? "хвилину" : mins < 5 ? "хвилини" : "хвилин";
+    parts.push(`${mins} ${m}`);
+  }
+  if (parts.length === 0) return "менше хвилини";
+  return parts.join(" ");
 }
 
 async function main() {
@@ -147,21 +167,27 @@ async function main() {
 
   const state = readState();
   const accessToken = await getAccessToken();
-  const { isOnline, raw } = await getDeviceOnline(accessToken);
+  const { isOnline } = await getDeviceOnline(accessToken);
   const currentStatus = isOnline ? "ONLINE" : "OFFLINE";
   const prevStatus = state.lastStatus ?? state.confirmedStatus ?? null;
-
-  writeState({ lastStatus: currentStatus });
+  const now = Date.now();
+  const lastStatusAt = state.lastStatusAt ?? now;
 
   if (prevStatus !== null && prevStatus !== currentStatus) {
-    const name = raw?.name || DEVICE_ID;
-    const dt = formatDateUk(new Date());
+    const dt = formatDateUk(new Date(), false);
+    const durationMs = state.lastStatusAt != null ? now - lastStatusAt : NaN;
+    const durationStr = formatDurationUk(durationMs);
     const isOnlineNow = currentStatus === "ONLINE";
     const emoji = isOnlineNow ? "✅" : "❌";
-    const text = isOnlineNow
-      ? `${emoji} ${name}: з'явилось світло — ${dt}`
-      : `${emoji} ${name}: світло зникло — ${dt}`;
+    const line1 = `${emoji} СВІТЛО ${isOnlineNow ? "З'ЯВИЛОСЯ" : "ЗНИКЛО"} — ${dt}`;
+    const line2 = durationStr
+      ? (isOnlineNow ? `Його не було ${durationStr}` : `Воно було ${durationStr}`)
+      : "";
+    const text = line2 ? `${line1}\n${line2}` : line1;
     await sendTelegram(text);
+    writeState({ lastStatus: currentStatus, lastStatusAt: now });
+  } else {
+    writeState({ lastStatus: currentStatus, lastStatusAt: prevStatus === currentStatus ? lastStatusAt : now });
   }
 }
 

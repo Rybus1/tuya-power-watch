@@ -12,178 +12,65 @@ const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
 const STATE_FILE = "state.json";
 
-await sendTelegram(`✅ workflow started: ${new Date().toISOString()}`);
-
 // антиспам
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 минут
-// антидребезг: сколько подряд одинаковых статусов нужно, чтобы считать его "настоящим"
 const STABLE_REQUIRED = 2;
 
 function sha256(str) {
   return crypto.createHash("sha256").update(str).digest("hex");
 }
 
-function sign(method, path, body, token, t) {
-  const stringToSign =
-    method + "\n" +
-    sha256(body || "") + "\n" +
-    "\n" +
-    path;
-
-  const message = CLIENT_ID + (token || "") + t + stringToSign;
-
-  return crypto
-    .createHmac("sha256", CLIENT_SECRET)
-    .update(message)
-    .digest("hex")
-    .toUpperCase();
-}
-
-function request(method, path, token) {
+function sendTelegram(text) {
   return new Promise((resolve, reject) => {
-    const t = Date.now().toString();
-    const signature = sign(method, path, "", token, t);
+    if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
+      console.log("⚠️ TG creds missing, skip telegram:", text);
+      return resolve();
+    }
 
-    const options = {
-      hostname: HOST,
-      path,
-      method,
-      headers: {
-        client_id: CLIENT_ID,
-        t,
-        sign_method: "HMAC-SHA256",
-        sign: signature,
-        "Content-Type": "application/json",
-        ...(token && { access_token: token }),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error("Failed to parse JSON: " + data));
-        }
-      });
+    const data = JSON.stringify({
+      chat_id: TG_CHAT_ID,
+      text,
+      disable_web_page_preview: true,
     });
 
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function getToken() {
-  const res = await request("GET", "/v1.0/token?grant_type=1");
-  if (!res.success) throw new Error("Tuya token error: " + JSON.stringify(res));
-  return res.result.access_token;
-}
-
-async function getOnline(token) {
-  const res = await request("GET", `/v2.0/cloud/thing/${DEVICE_ID}`, token);
-  if (!res.success) throw new Error("Tuya device error: " + JSON.stringify(res));
-  return !!res.result.is_online;
-}
-
-function sendTelegram(text) {
-  const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
-  const body = `chat_id=${TG_CHAT_ID}&text=${encodeURIComponent(text)}`;
-
-  return new Promise((resolve, reject) => {
     const req = https.request(
-      url,
       {
+        hostname: "api.telegram.org",
+        path: `/bot${TG_BOT_TOKEN}/sendMessage`,
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+        },
       },
       (res) => {
-        res.on("data", () => {});
-        res.on("end", resolve);
+        let body = "";
+        res.on("data", (c) => (body += c));
+        res.on("end", () => {
+          console.log("TG status:", res.statusCode, body.slice(0, 200));
+          resolve();
+        });
       }
     );
+
     req.on("error", reject);
-    req.write(body);
+    req.write(data);
     req.end();
   });
 }
 
-function loadState() {
-  if (fs.existsSync(STATE_FILE)) {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-  }
-  return {
-    // "подтвержденный" (стабильный) статус, на который реагируем
-    stableOnline: null,
+async function main() {
+  console.log("Started", new Date().toISOString());
 
-    // для антидребезга:
-    lastRaw: null,
-    rawStreak: 0,
+  await sendTelegram(`✅ workflow started: ${new Date().toISOString()}`);
 
-    // антиспам:
-    lastSentOnline: 0,
-    lastSentOffline: 0,
-  };
+  // TODO: дальше твоя логика опроса Tuya + сравнение статуса + запись state.json
 }
 
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
-
-function canSend(now, lastSent) {
-  return now - lastSent > COOLDOWN_MS;
-}
-
-(async () => {
-  const state = loadState();
-
-  const token = await getToken();
-  const rawOnline = await getOnline(token);
-
-  // антидребезг: считаем, сколько раз подряд пришёл один и тот же raw статус
-  if (state.lastRaw === rawOnline) {
-    state.rawStreak += 1;
-  } else {
-    state.lastRaw = rawOnline;
-    state.rawStreak = 1;
-  }
-
-  // если статус ещё не стабилизировался — просто сохраняем и выходим
-  if (state.rawStreak < STABLE_REQUIRED) {
-    saveState(state);
-    return;
-  }
-
-  const now = Date.now();
-
-  // первый стабильный запуск — просто запоминаем без уведомления
-  if (state.stableOnline === null) {
-    state.stableOnline = rawOnline;
-    saveState(state);
-    return;
-  }
-
-  // переходы
-  if (state.stableOnline === false && rawOnline === true) {
-    // OFFLINE -> ONLINE
-    if (canSend(now, state.lastSentOnline)) {
-      await sendTelegram("⚡ Свет от столба ВЕРНУЛСЯ. Можно выключать генератор и переключаться обратно.");
-      state.lastSentOnline = now;
-    }
-    state.stableOnline = true;
-  } else if (state.stableOnline === true && rawOnline === false) {
-    // ONLINE -> OFFLINE
-    if (canSend(now, state.lastSentOffline)) {
-      await sendTelegram("🚫 Свет от столба ПРОПАЛ. Если нужно — можно запускать генератор.");
-      state.lastSentOffline = now;
-    }
-    state.stableOnline = false;
-  }
-
-  saveState(state);
-})().catch((e) => {
-  // чтобы в логах GitHub было видно причину падения
-  console.error(e);
+main().catch(async (e) => {
+  console.error("❌ Fatal:", e);
+  try {
+    await sendTelegram(`❌ Fatal error: ${String(e.message || e)}`);
+  } catch (_) {}
   process.exit(1);
 });

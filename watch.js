@@ -251,8 +251,8 @@ async function main() {
   const dtStr = formatDateUkStatus(new Date());
   const hasLight = currentStatus === "ONLINE";
   const statusLine = hasLight
-    ? `✅ Є СВІТЛО. Воно там є вже протягом ${durationStrProtyahom}.`
-    : `❌ НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStrProtyahom}.`;
+    ? `✅ Є СВІТЛО.\nВоно там є вже протягом ${durationStrProtyahom}.`
+    : `❌ НЕМАЄ СВІТЛА.\nЙого нема вже протягом ${durationStrProtyahom}.`;
   const statusReply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
 
   for (const chatId of pendingStatusChats) {

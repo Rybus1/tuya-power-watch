@@ -13,8 +13,10 @@ const TG_CHAT_ID = process.env.TG_CHAT_ID;
 const STATE_FILE = "state.json";
 
 // антиспам
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 минут
-const STABLE_REQUIRED = 2;
+// const COOLDOWN_MS = 10 * 60 * 1000; // 10 минут
+// const STABLE_REQUIRED = 2;
+const STABLE_REQUIRED = 1;
+const COOLDOWN_MS = 0;
 
 function sha256(str) {
   return crypto.createHash("sha256").update(str).digest("hex");

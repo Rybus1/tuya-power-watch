@@ -201,7 +201,6 @@ async function main() {
     if (!msg?.text || msg.text.trim() !== "/status") continue;
     const chatId = msg.chat?.id;
     if (!chatId) continue;
-    await sendTelegramTo(chatId, "Ваш запит в процесі обробки, зачекайте…");
     pendingStatusChats.push(chatId);
   }
 
@@ -234,8 +233,8 @@ async function main() {
   const dtStr = formatDateUkStatus(new Date());
   const hasLight = currentStatus === "ONLINE";
   const statusLine = hasLight
-    ? `Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
-    : `НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
+    ? `✅ Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
+    : `❌ НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
   const statusReply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
 
   for (const chatId of pendingStatusChats) {

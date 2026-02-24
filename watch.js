@@ -11,6 +11,7 @@ const CLIENT_SECRET = process.env.TUYA_CLIENT_SECRET;
 const DEVICE_ID = process.env.TUYA_DEVICE_ID;
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
+const LOCATION_NAME = "Вілла Риба";
 const STATE_FILE = "state.json";
 
 function sha256(str) {
@@ -25,7 +26,7 @@ function readState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
   } catch (_) {
-    return { lastStatus: null, lastStatusAt: null };
+    return { lastStatus: null, lastStatusAt: null, lastProcessedUpdateId: null };
   }
 }
 
@@ -117,8 +118,13 @@ async function getDeviceOnline(accessToken) {
 
 async function sendTelegram(text) {
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) return;
+  await sendTelegramTo(TG_CHAT_ID, text);
+}
+
+async function sendTelegramTo(chatId, text) {
+  if (!TG_BOT_TOKEN) return;
   const path =
-    `/bot${TG_BOT_TOKEN}/sendMessage?chat_id=${encodeURIComponent(TG_CHAT_ID)}` +
+    `/bot${TG_BOT_TOKEN}/sendMessage?chat_id=${encodeURIComponent(chatId)}` +
     `&text=${encodeURIComponent(String(text))}` +
     `&disable_web_page_preview=true`;
   const { statusCode, json } = await httpsRequest({
@@ -132,6 +138,18 @@ async function sendTelegram(text) {
   }
 }
 
+async function getTelegramUpdates(offset) {
+  if (!TG_BOT_TOKEN) return { result: [] };
+  const path = `/bot${TG_BOT_TOKEN}/getUpdates?offset=${offset}&timeout=0`;
+  const { json } = await httpsRequest({
+    method: "GET",
+    hostname: "api.telegram.org",
+    path,
+    headers: {}
+  });
+  return json?.result ?? [];
+}
+
 function formatDateUk(d, withSeconds = true) {
   const date = d instanceof Date ? d : new Date(d);
   const opts = { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false };
@@ -140,6 +158,14 @@ function formatDateUk(d, withSeconds = true) {
   const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
   const time = withSeconds ? `${get("hour")}:${get("minute")}:${get("second")}` : `${get("hour")}:${get("minute")}`;
   return `${get("day")}.${get("month")}.${get("year")} час ${time}`;
+}
+
+function formatDateUkStatus(d) {
+  const date = d instanceof Date ? d : new Date(d);
+  const opts = { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false };
+  const parts = new Intl.DateTimeFormat("uk-UA", opts).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
+  return `о ${get("hour")}:${get("minute")} годині ${get("day")}.${get("month")}.${get("year")}`;
 }
 
 function formatDurationUk(ms) {
@@ -173,6 +199,8 @@ async function main() {
   const now = Date.now();
   const lastStatusAt = state.lastStatusAt ?? now;
 
+  const nextState = { ...state, lastStatus: currentStatus, lastStatusAt: prevStatus !== null && prevStatus !== currentStatus ? now : (prevStatus === currentStatus ? lastStatusAt : now) };
+
   if (prevStatus !== null && prevStatus !== currentStatus) {
     const dt = formatDateUk(new Date(), false);
     const durationMs = state.lastStatusAt != null ? now - lastStatusAt : NaN;
@@ -185,10 +213,30 @@ async function main() {
       : "";
     const text = line2 ? `${line1}\n${line2}` : line1;
     await sendTelegram(text);
-    writeState({ lastStatus: currentStatus, lastStatusAt: now });
-  } else {
-    writeState({ lastStatus: currentStatus, lastStatusAt: prevStatus === currentStatus ? lastStatusAt : now });
+    nextState.lastStatusAt = now;
   }
+
+  const durationMs = now - (nextState.lastStatusAt ?? now);
+  const durationStr = formatDurationUk(durationMs);
+
+  const updates = await getTelegramUpdates((state.lastProcessedUpdateId ?? 0) + 1);
+  let maxUpdateId = state.lastProcessedUpdateId ?? 0;
+  for (const u of updates) {
+    if (u.update_id > maxUpdateId) maxUpdateId = u.update_id;
+    const msg = u.message;
+    if (!msg?.text || msg.text.trim() !== "/status") continue;
+    const chatId = msg.chat?.id;
+    if (!chatId) continue;
+    const dtStr = formatDateUkStatus(new Date());
+    const hasLight = currentStatus === "ONLINE";
+    const statusLine = hasLight
+      ? `Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
+      : `НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
+    const reply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
+    await sendTelegramTo(chatId, reply);
+  }
+  nextState.lastProcessedUpdateId = maxUpdateId;
+  writeState(nextState);
 }
 
 main().catch(async (err) => {

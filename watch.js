@@ -192,6 +192,19 @@ async function main() {
   }
 
   const state = readState();
+  const updates = await getTelegramUpdates((state.lastProcessedUpdateId ?? 0) + 1);
+  let maxUpdateId = state.lastProcessedUpdateId ?? 0;
+  const pendingStatusChats = [];
+  for (const u of updates) {
+    if (u.update_id > maxUpdateId) maxUpdateId = u.update_id;
+    const msg = u.message;
+    if (!msg?.text || msg.text.trim() !== "/status") continue;
+    const chatId = msg.chat?.id;
+    if (!chatId) continue;
+    await sendTelegramTo(chatId, "Ваш запит в процесі обробки, зачекайте…");
+    pendingStatusChats.push(chatId);
+  }
+
   const accessToken = await getAccessToken();
   const { isOnline } = await getDeviceOnline(accessToken);
   const currentStatus = isOnline ? "ONLINE" : "OFFLINE";
@@ -218,22 +231,15 @@ async function main() {
 
   const durationMs = now - (nextState.lastStatusAt ?? now);
   const durationStr = formatDurationUk(durationMs);
+  const dtStr = formatDateUkStatus(new Date());
+  const hasLight = currentStatus === "ONLINE";
+  const statusLine = hasLight
+    ? `Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
+    : `НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
+  const statusReply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
 
-  const updates = await getTelegramUpdates((state.lastProcessedUpdateId ?? 0) + 1);
-  let maxUpdateId = state.lastProcessedUpdateId ?? 0;
-  for (const u of updates) {
-    if (u.update_id > maxUpdateId) maxUpdateId = u.update_id;
-    const msg = u.message;
-    if (!msg?.text || msg.text.trim() !== "/status") continue;
-    const chatId = msg.chat?.id;
-    if (!chatId) continue;
-    const dtStr = formatDateUkStatus(new Date());
-    const hasLight = currentStatus === "ONLINE";
-    const statusLine = hasLight
-      ? `Є СВІТЛО. Воно там є вже протягом ${durationStr}.`
-      : `НЕМАЄ СВІТЛА. Його нема вже протягом ${durationStr}.`;
-    const reply = `Зараз, ${dtStr} у ${LOCATION_NAME} ${statusLine}`;
-    await sendTelegramTo(chatId, reply);
+  for (const chatId of pendingStatusChats) {
+    await sendTelegramTo(chatId, statusReply);
   }
   nextState.lastProcessedUpdateId = maxUpdateId;
   writeState(nextState);

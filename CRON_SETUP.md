@@ -21,17 +21,18 @@ GitHub Actions не умеет schedule чаще чем раз в 5 минут. 
 3. Поля:
    - **Title:** `Tuya Watch` (любое).
    - **URL:**  
-     `https://api.github.com/repos/YOUR_USERNAME/YOUR_REPO/dispatches`  
-     Подставь вместо `YOUR_USERNAME` и `YOUR_REPO` свой логин и имя репозитория (например `johndoe/tuya-power-watch`).
+     `https://api.github.com/repos/YOUR_USERNAME/YOUR_REPO/actions/workflows/watch.yml/dispatches`  
+     Подставь вместо `YOUR_USERNAME` и `YOUR_REPO` свой логин и имя репозитория (например `Rybus1/tuya-power-watch`).
    - **Schedule:** каждую минуту — выбери **Every minute** или `* * * * *`.
    - **Request Method:** **POST**.
    - **Request Headers:** добавь два заголовка:
      - `Authorization`: `token ВАШ_GITHUB_PAT` (подставь токен из шага 1).
-     - `Content-Type`: `application/json`
+     - `Accept`: `application/vnd.github.v3+json`
    - **Request Body:** включи **Custom body**, тип JSON, содержимое:
      ```json
-     {"event_type": "cron-tick"}
+     {"ref":"main"}
      ```
+     (если сервис глючит с телом — можно попробовать оставить тело пустым.)
 4. Сохрани cronjob (**Create** / **Update**).
 
 Готово. Каждую минуту cron-job.org будет отправлять POST в GitHub, и workflow будет запускаться.

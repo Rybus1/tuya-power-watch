@@ -263,9 +263,12 @@ async function main() {
 }
 
 main().catch(async (err) => {
-  console.error("watch error:", err.message || err);
-  try {
-    await sendTelegram(`❌ Помилка: ${err.message || err}`);
-  } catch (_) {}
+  const isAggregate = err?.name === "AggregateError" || err?.message === "AggregateError";
+  if (!isAggregate) {
+    console.error("watch error:", err.message || err);
+    try {
+      await sendTelegram(`❌ Помилка: ${err.message || err}`);
+    } catch (_) {}
+  }
   process.exit(1);
 });
